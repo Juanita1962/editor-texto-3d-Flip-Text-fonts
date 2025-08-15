@@ -1,0 +1,1096 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Editor CSG de Texto 3D (Estable)</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: { colors: { 'primary': '#3b82f6', 'dark': '#111827' } }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; overflow: hidden; }
+        #canvas-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; cursor: grab; z-index: 0; }
+        .panel { position: fixed; top: 0; height: 100%; background-color: rgba(17, 24, 39, 0.9); backdrop-filter: blur(12px); border-color: #374151; padding: 1.5rem; overflow-y: auto; width: 360px; z-index: 10; }
+        .panel-left { left: 0; border-right-width: 1px; }
+        .panel-right { right: 0; border-left-width: 1px; }
+        input, select, button { text-transform: uppercase; }
+        button:disabled { cursor: not-allowed; opacity: 0.5; }
+        input[type="range"] { -webkit-appearance: none; height: 6px; background: #4b5563; border-radius: 5px; }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; height: 16px; width: 16px; border-radius: 50%; background: #3b82f6; cursor: pointer; }
+        input[type="color"] { -webkit-appearance: none; border: none; padding: 0; }
+        input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+        input[type="color"]::-webkit-color-swatch { border: none; border-radius: 6px; }
+        input[type="number"] { -moz-appearance: textfield; } /* Firefox */
+        input[type="number"]::-webkit-inner-spin-button, 
+        input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        .loading-spinner { animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        /* --- ESTILOS PARA VALIDACIÓN --- */
+        .input-error {
+            color: #ef4444 !important; /* Rojo */
+            border-color: #ef4444 !important;
+        }
+        .input-error::placeholder {
+            color: #b91c1c;
+        }
+        .error-tooltip {
+            visibility: hidden;
+            opacity: 0;
+            position: absolute;
+            bottom: 115%;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #ef4444;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 500;
+            white-space: nowrap;
+            z-index: 20;
+            transition: opacity 0.2s, visibility 0.2s;
+        }
+        .error-tooltip::after {
+            content: "";
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            margin-left: -5px;
+            border-width: 5px;
+            border-style: solid;
+            border-color: #ef4444 transparent transparent transparent;
+        }
+        .error-tooltip.visible {
+            visibility: visible;
+            opacity: 1;
+        }
+    </style>
+</head>
+<body class="bg-dark text-gray-100">
+
+    <div id="canvas-container"></div>
+
+    <div class="panel panel-left">
+        <h2 class="text-xl font-bold text-white mb-6 flex items-center gap-3"><i class="fas fa-cubes text-blue-400"></i>Flip Text - Editor CSG</h2>
+        <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 mb-6">
+            <h3 class="text-sm font-bold text-gray-300 mb-3 flex items-center gap-2"><i class="fas fa-font"></i> PASO 1: DEFINIR TEXTOS</h3>
+            <div class="space-y-4">
+                <div class="relative">
+                    <label for="text-horizontal-input" class="block text-xs font-medium text-gray-400 mb-1">Texto Horizontal (Alto: 40mm, Prof: 80mm)</label>
+                    <div class="flex items-center gap-2">
+                        <input type="text" id="text-horizontal-input" value="LEJOS" maxlength="8" class="bg-gray-900 border border-gray-700 text-white placeholder-gray-500 text-sm rounded-lg block w-full p-2.5 transition-colors">
+                        <input type="color" id="color-horizontal-input" value="#D9534F" title="Color para texto horizontal" class="p-1 h-10 w-14 block bg-gray-900 border border-gray-700 cursor-pointer rounded-lg">
+                    </div>
+                    <span id="error-horizontal" class="error-tooltip"></span>
+                </div>
+                <div class="relative">
+                    <label for="text-vertical-input" class="block text-xs font-medium text-gray-400 mb-1">Texto Vertical (Alto: 55mm, Prof: 55mm)</label>
+                    <div class="flex items-center gap-2">
+                        <input type="text" id="text-vertical-input" value="CERCA" maxlength="8" class="bg-gray-900 border border-gray-700 text-white placeholder-gray-500 text-sm rounded-lg block w-full p-2.5 transition-colors">
+                        <input type="color" id="color-vertical-input" value="#3B82F6" title="Color para texto vertical" class="p-1 h-10 w-14 block bg-gray-900 border border-gray-700 cursor-pointer rounded-lg">
+                    </div>
+                     <span id="error-vertical" class="error-tooltip"></span>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label for="font-family-select" class="block text-xs font-medium text-gray-400 mb-1">Tipografía</label>
+                        <select id="font-family-select" class="bg-gray-900 border border-gray-700 text-white text-sm rounded-lg block w-full p-2.5">
+                            <option value="helvetiker">HELVETIKER</option>
+                            <option value="gentilis">GENTILIS</option>
+                            <option value="optimer">OPTIMER</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="font-weight-select" class="block text-xs font-medium text-gray-400 mb-1">Estilo</label>
+                        <select id="font-weight-select" class="bg-gray-900 border border-gray-700 text-white text-sm rounded-lg block w-full p-2.5">
+                            <option value="bold">NEGRITA</option>
+                            <option value="regular">NORMAL</option>
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <div class="flex justify-between items-center">
+                        <label for="overlap-slider" class="block text-xs font-medium text-gray-400">Nivel de Traslape (mm)</label>
+                        <span id="overlap-value" class="text-xs font-mono bg-gray-900 px-2 py-1 rounded">7</span>
+                    </div>
+                    <input type="range" id="overlap-slider" min="0" max="15" value="7" step="0.5" class="w-full mt-2">
+                </div>
+                <div class="pt-2">
+                    <div class="flex items-center justify-between">
+                        <label for="force-length-toggle" class="block text-xs font-medium text-gray-400">Forzar Longitud Final</label>
+                        <input type="checkbox" id="force-length-toggle" checked class="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-600 ring-offset-gray-800 focus:ring-2">
+                    </div>
+                    <div class="flex justify-between items-center mt-2">
+                         <label for="length-slider" class="block text-xs font-medium text-gray-400">Longitud (mm)</label>
+                         <span id="length-value" class="text-xs font-mono bg-gray-900 px-2 py-1 rounded">150</span>
+                    </div>
+                    <input type="range" id="length-slider" min="130" max="180" value="150" step="1" class="w-full mt-2">
+                </div>
+                <div class="pt-2">
+                    <div class="flex justify-between items-center">
+                        <label for="vertical-stretch-slider" class="block text-xs font-medium text-gray-400">Estirar Altura (Factor)</label>
+                        <span id="vertical-stretch-value" class="text-xs font-mono bg-gray-900 px-2 py-1 rounded">1.1</span>
+                    </div>
+                    <input type="range" id="vertical-stretch-slider" min="0.5" max="3" value="1.1" step="0.1" class="w-full mt-2">
+                </div>
+                <div class="pt-2">
+                    <div class="flex justify-between items-center">
+                        <label for="quality-slider" class="block text-xs font-medium text-gray-400">Calidad de Malla</label>
+                        <span id="quality-value" class="text-xs font-mono bg-gray-900 px-2 py-1 rounded">12</span>
+                    </div>
+                    <input type="range" id="quality-slider" min="4" max="32" value="12" step="1" class="w-full mt-2">
+                </div>
+            </div>
+            <button id="generate-btn" class="mt-4 w-full flex items-center justify-center gap-2 text-white bg-blue-600 hover:bg-blue-700 font-medium rounded-lg text-sm px-5 py-2.5 text-center transition-all">
+                <i class="fas fa-magic"></i> Generar Modelo Base
+            </button>
+        </div>
+    </div>
+
+    <div class="panel panel-right">
+        <h2 class="text-xl font-bold text-white mb-6 flex items-center gap-3"><i class="fas fa-cogs text-blue-400"></i>Operaciones</h2>
+        
+        <div id="step-viewer" class="flex items-start w-full mb-8">
+            <div class="step-item flex flex-col items-center text-center">
+                <span class="step-icon flex w-8 h-8 items-center justify-center rounded-full font-bold">1</span>
+                <span class="step-text text-xs font-medium mt-1">DEFINIR</span>
+            </div>
+            <div class="step-line flex-auto pt-3.5 px-1">
+                <div class="h-0.5 w-full"></div>
+            </div>
+            <div class="step-item flex flex-col items-center text-center">
+                <span class="step-icon flex w-8 h-8 items-center justify-center rounded-full font-bold">2</span>
+                <span class="step-text text-xs font-medium mt-1">COMBINAR</span>
+            </div>
+            <div class="step-line flex-auto pt-3.5 px-1">
+                <div class="h-0.5 w-full"></div>
+            </div>
+            <div class="step-item flex flex-col items-center text-center">
+                <span class="step-icon flex w-8 h-8 items-center justify-center rounded-full font-bold">3</span>
+                <span class="step-text text-xs font-medium mt-1">CORTAR</span>
+            </div>
+             <div class="step-line flex-auto pt-3.5 px-1">
+                <div class="h-0.5 w-full"></div>
+            </div>
+            <div class="step-item flex flex-col items-center text-center">
+                <span class="step-icon flex w-8 h-8 items-center justify-center rounded-full font-bold">4</span>
+                <span class="step-text text-xs font-medium mt-1">AJUSTAR</span>
+            </div>
+             <div class="step-line flex-auto pt-3.5 px-1">
+                <div class="h-0.5 w-full"></div>
+            </div>
+            <div class="step-item flex flex-col items-center text-center">
+                <span class="step-icon flex w-8 h-8 items-center justify-center rounded-full font-bold">5</span>
+                <span class="step-text text-xs font-medium mt-1">EXPORTAR</span>
+            </div>
+        </div>
+        <div id="view-controls" class="bg-gray-800 p-4 rounded-xl border border-gray-700 mb-6">
+            <h3 class="text-sm font-bold text-gray-300 mb-3 flex items-center gap-2"><i class="fas fa-eye"></i> VISUALIZACIÓN</h3>
+            <button id="toggle-wireframe-btn" class="w-full flex items-center justify-center gap-2 text-white bg-indigo-600 hover:bg-indigo-700 font-medium rounded-lg text-sm px-5 py-2.5 text-center transition-all">
+                <i class="fas fa-network-wired"></i> VER MALLA
+            </button>
+        </div>
+        
+        <div id="letter-controls" class="bg-gray-800 p-4 rounded-xl border border-gray-700 mb-6 hidden">
+            <h3 class="text-sm font-bold text-gray-300 mb-3 flex items-center gap-2"><i class="fas fa-edit"></i> EDITAR LETRA</h3>
+            <div class="space-y-4">
+                <div>
+                    <label for="letter-pos-x-slider" class="block text-xs font-medium text-gray-400 mb-1">Desplazamiento (mm)</label>
+                    <div class="flex items-center gap-2">
+                        <input type="range" id="letter-pos-x-slider" min="-30" max="30" value="0" step="0.5" class="w-full mt-1">
+                        <input type="number" id="letter-pos-x-input" value="0" step="0.1" class="bg-gray-900 border border-gray-700 w-20 text-center text-white text-sm rounded-lg p-2">
+                    </div>
+                </div>
+                <div>
+                    <label for="letter-scale-x-slider" class="block text-xs font-medium text-gray-400 mb-1">Ajuste Ancho (mm)</label>
+                    <div class="flex items-center gap-2">
+                        <input type="range" id="letter-scale-x-slider" min="-15" max="15" value="0" step="0.5" class="w-full mt-1">
+                        <input type="number" id="letter-scale-x-input" value="0" step="0.1" class="bg-gray-900 border border-gray-700 w-20 text-center text-white text-sm rounded-lg p-2">
+                    </div>
+                </div>
+                <div>
+                    <label for="letter-scale-y-slider" class="block text-xs font-medium text-gray-400 mb-1">Ajuste Altura (mm)</label>
+                    <div class="flex items-center gap-2">
+                        <input type="range" id="letter-scale-y-slider" min="-15" max="15" value="0" step="0.5" class="w-full mt-1">
+                        <input type="number" id="letter-scale-y-input" value="0" step="0.1" class="bg-gray-900 border border-gray-700 w-20 text-center text-white text-sm rounded-lg p-2">
+                    </div>
+                </div>
+                <div class="pt-2 border-t border-gray-700">
+                     <button id="reset-letter-btn" class="w-full flex items-center justify-center gap-2 text-white bg-yellow-600 hover:bg-yellow-700 font-medium rounded-lg text-sm px-5 py-2.5 text-center transition-all">
+                        <i class="fas fa-undo"></i> Restablecer Letra
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div id="combination-controls" class="bg-gray-800 p-4 rounded-xl border border-gray-700 mb-6 hidden">
+             <h3 class="text-sm font-bold text-gray-300 mb-3 flex items-center gap-2"><i class="fas fa-sitemap"></i> PASO 2: COMBINAR OBJETOS</h3>
+             <div class="space-y-4">
+                 <div>
+                     <label for="boolean-op-select" class="block text-xs font-medium text-gray-400 mb-1">Operación Booleana</label>
+                     <select id="boolean-op-select" class="bg-gray-900 border border-gray-700 text-white text-sm rounded-lg block w-full p-2.5">
+                         <option value="subtract">EXTRAER (HORIZONTAL - VERTICAL)</option>
+                         <option value="intersect" selected>INTERSECAR</option>
+                         <option value="union">UNIR (SOLDAR)</option>
+                     </select>
+                 </div>
+                 <button id="combine-btn" class="w-full flex items-center justify-center gap-2 text-white bg-green-600 hover:bg-green-700 font-medium rounded-lg text-sm px-5 py-2.5 text-center transition-all">
+                     <i class="fas fa-check-double"></i> Crear Objeto Final
+                 </button>
+             </div>
+        </div>
+        
+        <div id="cut-controls" class="bg-gray-800 p-4 rounded-xl border border-gray-700 mb-6 hidden">
+            <h3 class="text-sm font-bold text-gray-300 mb-3 flex items-center gap-2"><i class="fas fa-cut"></i> PASO 3: CORTES PLANOS</h3>
+            <div class="space-y-4">
+                <div>
+                    <div class="flex justify-between items-center">
+                        <label for="cut-height-slider" class="block text-xs font-medium text-gray-400">Corte Base (mm)</label>
+                        <span id="cut-height-value" class="text-xs font-mono bg-yellow-900 text-yellow-300 px-2 py-1 rounded">0</span>
+                    </div>
+                    <input type="range" id="cut-height-slider" min="0" max="50" value="0" step="0.1" class="w-full mt-2">
+                </div>
+                
+                <div class="pt-2 border-t border-gray-700/50">
+                    <div class="flex justify-between items-center mb-2">
+                         <label for="enable-top-cut-toggle" class="block text-xs font-medium text-gray-400">HABILITAR CORTE SUPERIOR</label>
+                         <input type="checkbox" id="enable-top-cut-toggle" class="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-600 ring-offset-gray-800 focus:ring-2">
+                    </div>
+                    <div id="top-cut-group" class="transition-opacity">
+                        <div class="flex justify-between items-center">
+                            <label for="cut-height-slider-top" class="block text-xs font-medium text-gray-400">Altura Corte Superior (mm)</label>
+                            <span id="cut-height-value-top" class="text-xs font-mono bg-red-900 text-red-300 px-2 py-1 rounded">50</span>
+                        </div>
+                        <input type="range" id="cut-height-slider-top" min="0" max="50" value="50" step="0.1" class="w-full mt-2">
+                    </div>
+                </div>
+
+                <button id="apply-cuts-btn" class="w-full flex items-center justify-center gap-2 text-white bg-red-600 hover:bg-red-700 font-medium rounded-lg text-sm px-5 py-2.5 text-center transition-all">
+                    <i class="fas fa-check"></i> Aplicar Cortes
+                </button>
+            </div>
+       </div>
+
+        <div id="post-cut-controls" class="bg-gray-800 p-4 rounded-xl border border-gray-700 mb-6 hidden">
+            <h3 class="text-sm font-bold text-gray-300 mb-3 flex items-center gap-2"><i class="fas fa-ruler-combined"></i> PASO 4: AJUSTES FINALES</h3>
+            
+            <div class="bg-gray-900/50 p-3 rounded-lg border border-gray-700 mb-4">
+                <h4 class="text-xs font-bold text-blue-300 mb-2 text-center">DIMENSIONES (FLIP TEXT)</h4>
+                <div class="grid grid-cols-3 gap-2 text-center">
+                    <div>
+                        <span class="text-xs text-gray-400">ANCHO (X)</span>
+                        <p id="dim-x" class="font-mono text-lg text-white">0.00</p>
+                    </div>
+                    <div>
+                        <span class="text-xs text-gray-400">ALTO (Y)</span>
+                        <p id="dim-y" class="font-mono text-lg text-white">0.00</p>
+                    </div>
+                    <div>
+                        <span class="text-xs text-gray-400">PROF. (Z)</span>
+                        <p id="dim-z" class="font-mono text-lg text-white">0.00</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="space-y-4">
+                <div>
+                    <div class="flex justify-between items-center">
+                        <label for="scale-x-slider" class="block text-xs font-medium text-gray-400">ANCHO FINAL (mm)</label>
+                        <span id="scale-x-value" class="text-xs font-mono bg-gray-900 px-2 py-1 rounded">150.00</span>
+                    </div>
+                    <input type="range" id="scale-x-slider" min="110" max="155" value="150" step="0.5" class="w-full mt-2">
+                </div>
+                <div>
+                    <div class="flex justify-between items-center">
+                        <label for="scale-y-slider" class="block text-xs font-medium text-gray-400">ALTO FINAL (mm)</label>
+                        <span id="scale-y-value" class="text-xs font-mono bg-gray-900 px-2 py-1 rounded">40.00</span>
+                    </div>
+                    <input type="range" id="scale-y-slider" min="30" max="42" value="40" step="0.1" class="w-full mt-2">
+                </div>
+                <div>
+                    <div class="flex justify-between items-center">
+                        <label for="scale-z-slider" class="block text-xs font-medium text-gray-400">PROFUNDIDAD FINAL (mm)</label>
+                        <span id="scale-z-value" class="text-xs font-mono bg-gray-900 px-2 py-1 rounded">40.00</span>
+                    </div>
+                    <input type="range" id="scale-z-slider" min="30" max="42" value="40" step="0.1" class="w-full mt-2">
+                </div>
+                 <div>
+                    <label class="block text-xs font-medium text-gray-400 mb-2">PALETA DE COLORES</label>
+                    <div id="color-palette" class="grid grid-cols-4 gap-2">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="download-controls" class="bg-gray-800 p-4 rounded-xl border border-gray-700 hidden">
+            <h3 class="text-sm font-bold text-gray-300 mb-3 flex items-center gap-2"><i class="fas fa-download"></i> PASO 5: EXPORTAR</h3>
+            <div class="flex gap-2">
+                 <button id="download-gltf-btn" class="w-full flex items-center justify-center gap-2 text-white bg-purple-600 hover:bg-purple-700 font-medium rounded-lg text-sm px-5 py-2.5 text-center transition-all">
+                     .GLTF
+                 </button>
+                 <button id="download-stl-btn" class="w-full flex items-center justify-center gap-2 text-white bg-orange-600 hover:bg-orange-700 font-medium rounded-lg text-sm px-5 py-2.5 text-center transition-all">
+                     .STL
+                 </button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="loading-message" class="fixed inset-0 z-20 flex-col items-center justify-center bg-dark bg-opacity-95 hidden">
+        <div class="loading-spinner text-4xl text-blue-500 mb-4"><i class="fas fa-spinner"></i></div>
+        <h3 id="loading-text" class="text-xl font-semibold text-white">PROCESANDO...</h3>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/",
+                "three-csg-ts": "https://esm.sh/three-csg-ts"
+            }
+        }
+    </script>
+    
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { FontLoader } from 'three/addons/loaders/FontLoader.js';
+        import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
+        import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+        import { STLExporter } from 'three/addons/exporters/STLExporter.js';
+        import { CSG } from 'three-csg-ts';
+
+        // --- DOM Elements ---
+        const textHorizontalInput = document.getElementById('text-horizontal-input');
+        const colorHorizontalInput = document.getElementById('color-horizontal-input');
+        const textVerticalInput = document.getElementById('text-vertical-input');
+        const colorVerticalInput = document.getElementById('color-vertical-input');
+        const fontFamilySelect = document.getElementById('font-family-select');
+        const fontWeightSelect = document.getElementById('font-weight-select');
+        const generateBtn = document.getElementById('generate-btn');
+        const combineBtn = document.getElementById('combine-btn');
+        const downloadGltfBtn = document.getElementById('download-gltf-btn');
+        const downloadStlBtn = document.getElementById('download-stl-btn');
+        const booleanOpSelect = document.getElementById('boolean-op-select');
+        const combinationControls = document.getElementById('combination-controls');
+        const downloadControls = document.getElementById('download-controls');
+        const loadingMessage = document.getElementById('loading-message');
+        const loadingText = document.getElementById('loading-text');
+        const overlapSlider = document.getElementById('overlap-slider');
+        const overlapValue = document.getElementById('overlap-value');
+        const forceLengthToggle = document.getElementById('force-length-toggle');
+        const lengthSlider = document.getElementById('length-slider');
+        const lengthValue = document.getElementById('length-value');
+        const verticalStretchSlider = document.getElementById('vertical-stretch-slider');
+        const verticalStretchValue = document.getElementById('vertical-stretch-value');
+        const qualitySlider = document.getElementById('quality-slider');
+        const qualityValue = document.getElementById('quality-value');
+        const toggleWireframeBtn = document.getElementById('toggle-wireframe-btn');
+        const cutControls = document.getElementById('cut-controls');
+        const cutHeightSlider = document.getElementById('cut-height-slider');
+        const cutHeightValue = document.getElementById('cut-height-value');
+        const applyCutsBtn = document.getElementById('apply-cuts-btn');
+        const cutHeightSliderTop = document.getElementById('cut-height-slider-top');
+        const cutHeightValueTop = document.getElementById('cut-height-value-top');
+        const postCutControls = document.getElementById('post-cut-controls');
+        const scaleXSlider = document.getElementById('scale-x-slider');
+        const scaleXValue = document.getElementById('scale-x-value');
+        const scaleYSlider = document.getElementById('scale-y-slider');
+        const scaleYValue = document.getElementById('scale-y-value');
+        const scaleZSlider = document.getElementById('scale-z-slider');
+        const scaleZValue = document.getElementById('scale-z-value');
+        const colorPaletteContainer = document.getElementById('color-palette');
+        const enableTopCutToggle = document.getElementById('enable-top-cut-toggle');
+        const topCutGroup = document.getElementById('top-cut-group');
+        const letterControls = document.getElementById('letter-controls');
+        const letterScaleXSlider = document.getElementById('letter-scale-x-slider');
+        const letterScaleXInput = document.getElementById('letter-scale-x-input');
+        const letterPosXSlider = document.getElementById('letter-pos-x-slider');
+        const letterPosXInput = document.getElementById('letter-pos-x-input');
+        const resetLetterBtn = document.getElementById('reset-letter-btn');
+        // --- Elementos de UI añadidos para el ajuste de altura ---
+        const letterScaleYSlider = document.getElementById('letter-scale-y-slider');
+        const letterScaleYInput = document.getElementById('letter-scale-y-input');
+        // --- VALIDATION UI ELEMENTS ---
+        const errorHorizontalTooltip = document.getElementById('error-horizontal');
+        const errorVerticalTooltip = document.getElementById('error-vertical');
+        
+        // --- 3D Globals ---
+        let scene, camera, renderer, controls, fonts = {}, word1Group, word2Group, finalObject;
+        let cuttingPlaneHelper, cuttingPlaneHelperTop;
+        let isWireframe = false;
+        let unscaledFinalObjectHeight = 0, unscaledFinalObjectWidth = 0, unscaledFinalObjectDepth = 0;
+        
+        // --- Interaction Globals ---
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        let selectedLetter = null;
+        let originalLetterPosition = new THREE.Vector3();
+        let originalLetterScale = new THREE.Vector3();
+        let originalLetterWidth = 0;
+        let originalLetterHeight = 0; // Variable añadida
+        const highlightMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0xfef08a,
+            emissive: 0x555500,
+            wireframe: isWireframe 
+        });
+
+        async function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x111827);
+            camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 1, 2000);
+            camera.position.set(0, 75, 250); 
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+            
+            const hemiLight = new THREE.HemisphereLight(0xB1E1FF, 0xB97A20, 1.2);
+            scene.add(hemiLight);
+            const dirLight1 = new THREE.DirectionalLight(0xffffff, 1.5);
+            dirLight1.position.set(100, 200, 150);
+            scene.add(dirLight1);
+            const dirLight2 = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight2.position.set(-100, 100, -100);
+            scene.add(dirLight2);
+
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.target.set(0, 40, 0); 
+            const gridHelper = new THREE.GridHelper(500, 50, 0x444444, 0x888888);
+            scene.add(gridHelper);
+            
+            initCuttingTools();
+            populateColorPalette();
+            await loadFonts();
+            
+            setupEventListeners();
+            validateInputs(); // Initial validation check on page load
+            updateStepViewer(1);
+            animate();
+        }
+
+        async function loadFonts() {
+            try {
+                setLoading(true, 'Cargando tipografías...');
+                const fontLoader = new FontLoader();
+                const fontPath = 'https://cdn.jsdelivr.net/npm/three@0.165.0/examples/fonts/';
+                const [
+                    helvetiker_regular, helvetiker_bold,
+                    gentilis_regular, gentilis_bold,
+                    optimer_regular, optimer_bold
+                ] = await Promise.all([
+                    fontLoader.loadAsync(`${fontPath}helvetiker_regular.typeface.json`),
+                    fontLoader.loadAsync(`${fontPath}helvetiker_bold.typeface.json`),
+                    fontLoader.loadAsync(`${fontPath}gentilis_regular.typeface.json`),
+                    fontLoader.loadAsync(`${fontPath}gentilis_bold.typeface.json`),
+                    fontLoader.loadAsync(`${fontPath}optimer_regular.typeface.json`),
+                    fontLoader.loadAsync(`${fontPath}optimer_bold.typeface.json`),
+                ]);
+                fonts = {
+                    helvetiker: { regular: helvetiker_regular, bold: helvetiker_bold },
+                    gentilis: { regular: gentilis_regular, bold: gentilis_bold },
+                    optimer: { regular: optimer_regular, bold: optimer_bold }
+                };
+            } catch (error) {
+                alert("Error crítico al cargar las fuentes. La aplicación no puede continuar.");
+                console.error("ERROR DE CARGA DE FUENTES:", error);
+                generateBtn.disabled = true; return;
+            } finally {
+                setLoading(false);
+            }
+        }
+        
+        function updateStepViewer(currentStep) {
+            const stepItems = document.querySelectorAll('#step-viewer .step-item');
+            const stepLines = document.querySelectorAll('#step-viewer .step-line > div');
+            const states = {
+                complete: { icon: ['bg-green-600', 'text-white'], text: ['text-green-300'], line: ['bg-green-600'] },
+                active: { icon: ['bg-blue-600', 'text-white', 'animate-pulse'], text: ['text-blue-300'], line: ['bg-gray-700'] },
+                inactive: { icon: ['bg-gray-700', 'text-gray-400'], text: ['text-gray-500'], line: ['bg-gray-700'] }
+            };
+            const cleanClasses = (element, stateList) => {
+                if (!element) return;
+                Object.values(stateList).forEach(state => Object.values(state).forEach(classes => element.classList.remove(...classes)));
+            };
+            stepItems.forEach((item, index) => {
+                const stepNumber = index + 1;
+                const icon = item.querySelector('.step-icon');
+                const text = item.querySelector('.step-text');
+                cleanClasses(icon, states);
+                cleanClasses(text, states);
+                let state = (currentStep > stepItems.length || stepNumber < currentStep) ? states.complete : (stepNumber === currentStep) ? states.active : states.inactive;
+                icon.classList.add(...state.icon);
+                text.classList.add(...state.text);
+            });
+            stepLines.forEach((line, index) => {
+                const stepNumber = index + 1;
+                cleanClasses(line, {line: states.complete.line, line2: states.inactive.line});
+                line.classList.add(...((currentStep > stepItems.length || stepNumber < currentStep) ? states.complete.line : states.inactive.line));
+            });
+        }
+       
+        // --- INICIO: LÓGICA DE VALIDACIÓN ---
+        function clearAllErrors() {
+            [textHorizontalInput, textVerticalInput].forEach(input => input.classList.remove('input-error'));
+            [errorHorizontalTooltip, errorVerticalTooltip].forEach(tooltip => tooltip.classList.remove('visible'));
+        }
+
+        function showError(inputElement, tooltipElement, message) {
+            inputElement.classList.add('input-error');
+            tooltipElement.textContent = message;
+            tooltipElement.classList.add('visible');
+        }
+
+        function validateInputs() {
+            clearAllErrors();
+            let isValid = true;
+            const textH = textHorizontalInput.value;
+            const textV = textVerticalInput.value;
+            const lenH = textH.length;
+            const lenV = textV.length;
+
+            // Regla 1: Mínimo 4 caracteres
+            if (lenH > 0 && lenH < 4) {
+                showError(textHorizontalInput, errorHorizontalTooltip, 'MÍNIMO 4 CARACTERES');
+                isValid = false;
+            }
+            if (lenV > 0 && lenV < 4) {
+                showError(textVerticalInput, errorVerticalTooltip, 'MÍNIMO 4 CARACTERES');
+                isValid = false;
+            }
+
+            // Regla 2: Máximo 8 caracteres (manejado por maxlength, pero validamos por si acaso)
+            if (lenH > 8) {
+                showError(textHorizontalInput, errorHorizontalTooltip, 'MÁXIMO 8 CARACTERES');
+                isValid = false;
+            }
+            if (lenV > 8) {
+                showError(textVerticalInput, errorVerticalTooltip, 'MÁXIMO 8 CARACTERES');
+                isValid = false;
+            }
+
+            // Regla 3: Si una tiene 7, la otra debe tener al menos 4
+            if ((lenH === 7 && lenV > 0 && lenV < 4) || (lenV === 7 && lenH > 0 && lenH < 4)) {
+                showError(textHorizontalInput, errorHorizontalTooltip, 'LA OTRA PALABRA REQUIERE 4 CARACTERES');
+                showError(textVerticalInput, errorVerticalTooltip, 'SE REQUIEREN 4 CARACTERES');
+                isValid = false;
+            }
+
+            // Regla 4: Si una tiene 8, la otra debe tener al menos 5
+            if ((lenH === 8 && lenV > 0 && lenV < 5) || (lenV === 8 && lenH > 0 && lenH < 5)) {
+                 showError(textHorizontalInput, errorHorizontalTooltip, 'LA OTRA PALABRA REQUIERE 5 CARACTERES');
+                 showError(textVerticalInput, errorVerticalTooltip, 'SE REQUIEREN 5 CARACTERES');
+                 isValid = false;
+            }
+
+            // Habilitar/deshabilitar botón de generar
+            generateBtn.disabled = !isValid;
+            return isValid;
+        }
+        // --- FIN: LÓGICA DE VALIDACIÓN ---
+
+        function setupEventListeners() {
+            window.addEventListener('resize', onWindowResize);
+            generateBtn.addEventListener('click', generateBaseModels);
+            combineBtn.addEventListener('click', performBooleanOperation);
+            downloadGltfBtn.addEventListener('click', downloadGltfModel);
+            downloadStlBtn.addEventListener('click', downloadStlModel);
+
+            // --- LISTENERS DE VALIDACIÓN EN TIEMPO REAL ---
+            textHorizontalInput.addEventListener('input', validateInputs);
+            textVerticalInput.addEventListener('input', validateInputs);
+            
+            overlapSlider.addEventListener('input', () => overlapValue.textContent = overlapSlider.value);
+            lengthSlider.addEventListener('input', () => lengthValue.textContent = lengthSlider.value);
+            verticalStretchSlider.addEventListener('input', () => verticalStretchValue.textContent = verticalStretchSlider.value);
+            qualitySlider.addEventListener('input', () => qualityValue.textContent = qualitySlider.value);
+            toggleWireframeBtn.addEventListener('click', toggleWireframeView);
+            
+            cutHeightSlider.addEventListener('input', (e) => {
+                const height = parseFloat(e.target.value);
+                cutHeightValue.textContent = height.toFixed(2);
+                if (cuttingPlaneHelper) cuttingPlaneHelper.position.y = height;
+            });
+            cutHeightSliderTop.addEventListener('input', (e) => {
+                const height = parseFloat(e.target.value);
+                cutHeightValueTop.textContent = height.toFixed(2);
+                if (cuttingPlaneHelperTop) cuttingPlaneHelperTop.position.y = height;
+            });
+            applyCutsBtn.addEventListener('click', performCuts);
+            
+            enableTopCutToggle.addEventListener('change', (e) => {
+                const isEnabled = e.target.checked;
+                cuttingPlaneHelperTop.visible = isEnabled;
+                topCutGroup.classList.toggle('opacity-50', !isEnabled);
+                topCutGroup.classList.toggle('pointer-events-none', !isEnabled);
+            });
+            
+            scaleXSlider.addEventListener('input', (e) => {
+                const desiredWidth = parseFloat(e.target.value);
+                scaleXValue.textContent = desiredWidth.toFixed(2);
+                if (finalObject && unscaledFinalObjectWidth > 0) {
+                    finalObject.scale.x = desiredWidth / unscaledFinalObjectWidth;
+                    updateFinalDimensions();
+                }
+            });
+            scaleYSlider.addEventListener('input', (e) => {
+                const desiredHeight = parseFloat(e.target.value);
+                scaleYValue.textContent = desiredHeight.toFixed(2);
+                if (finalObject && unscaledFinalObjectHeight > 0) {
+                    const newScaleY = desiredHeight / unscaledFinalObjectHeight;
+                    finalObject.scale.y = newScaleY;
+                    finalObject.position.y = (unscaledFinalObjectHeight * newScaleY) / 2;
+                    updateFinalDimensions();
+                }
+            });
+            scaleZSlider.addEventListener('input', (e) => {
+                const desiredDepth = parseFloat(e.target.value);
+                scaleZValue.textContent = desiredDepth.toFixed(2);
+                if (finalObject && unscaledFinalObjectDepth > 0) {
+                    finalObject.scale.z = desiredDepth / unscaledFinalObjectDepth;
+                    updateFinalDimensions();
+                }
+            });
+            colorPaletteContainer.addEventListener('click', (e) => {
+                if (e.target.tagName === 'BUTTON' && e.target.dataset.color) {
+                    const newColor = e.target.dataset.color;
+                    if (finalObject && finalObject.material) {
+                        finalObject.material.color.set(newColor);
+                    }
+                }
+            });
+            letterPosXSlider.addEventListener('input', (e) => updateLetterPosition(parseFloat(e.target.value)));
+            letterPosXInput.addEventListener('change', (e) => updateLetterPosition(parseFloat(e.target.value)));
+            letterScaleXSlider.addEventListener('input', (e) => updateLetterScale(parseFloat(e.target.value)));
+            letterScaleXInput.addEventListener('change', (e) => updateLetterScale(parseFloat(e.target.value)));
+            // --- Listeners añadidos para el ajuste de altura ---
+            letterScaleYSlider.addEventListener('input', (e) => updateLetterHeight(parseFloat(e.target.value)));
+            letterScaleYInput.addEventListener('change', (e) => updateLetterHeight(parseFloat(e.target.value)));
+            resetLetterBtn.addEventListener('click', resetSelectedLetter);
+            document.getElementById('canvas-container').addEventListener('mousedown', onDocumentMouseDown, false);
+        }
+        
+        function initCuttingTools() {
+            const planeGeo = new THREE.BoxGeometry(1, 1, 1);
+            cuttingPlaneHelper = new THREE.Mesh(planeGeo, new THREE.MeshStandardMaterial({ color: 0xffff00, transparent: true, opacity: 0.5 }));
+            cuttingPlaneHelper.visible = false;
+            scene.add(cuttingPlaneHelper);
+            cuttingPlaneHelperTop = new THREE.Mesh(planeGeo.clone(), new THREE.MeshStandardMaterial({ color: 0xff6666, transparent: true, opacity: 0.5 }));
+            cuttingPlaneHelperTop.visible = false;
+            scene.add(cuttingPlaneHelperTop);
+        }
+
+        function populateColorPalette() {
+            const colors = ['#d946ef', '#a3e635', '#2dd4bf', '#fb923c', '#60a5fa', '#f87171', '#facc15', '#ffffff'];
+            colorPaletteContainer.innerHTML = '';
+            colors.forEach(color => {
+                const swatch = document.createElement('button');
+                swatch.className = 'w-full h-10 rounded-md border-2 border-transparent focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-white transition-all';
+                swatch.style.backgroundColor = color;
+                swatch.dataset.color = color;
+                colorPaletteContainer.appendChild(swatch);
+            });
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function setLoading(isLoading, text = 'PROCESANDO...') {
+            loadingMessage.style.display = isLoading ? 'flex' : 'none';
+            loadingText.textContent = text;
+        }
+        
+        function createWord(text, { font, size, depth, material, overlapAmount, quality }) {
+            const wordGroup = new THREE.Group();
+            let currentX = 0;
+            const spacing = -overlapAmount;
+            for (const char of text.replace(/ /g, '')) {
+                const geometry = new TextGeometry(char, { font, size, height: depth, curveSegments: quality, bevelEnabled: false });
+                geometry.center();
+                const mesh = new THREE.Mesh(geometry, material.clone());
+                const charWidth = new THREE.Box3().setFromObject(mesh).getSize(new THREE.Vector3()).x;
+                mesh.position.x = currentX + charWidth / 2;
+                currentX += charWidth + spacing;
+                wordGroup.add(mesh);
+            }
+            return wordGroup;
+        }
+
+        async function generateBaseModels() {
+            if (!validateInputs()) {
+                // Si la validación falla, se muestra un error y se detiene
+                console.log("Validación fallida. Generación de modelo cancelada.");
+                return;
+            }
+            try {
+                setLoading(true, 'Generando modelos base...');
+                updateStepViewer(1);
+                await new Promise(res => setTimeout(res, 50));
+                
+                letterControls.classList.add('hidden');
+                if (selectedLetter) {
+                    if (selectedLetter.originalMaterial) selectedLetter.material = selectedLetter.originalMaterial;
+                    selectedLetter = null;
+                }
+                if (word1Group) scene.remove(word1Group);
+                if (word2Group) scene.remove(word2Group);
+                if (finalObject) scene.remove(finalObject);
+                word1Group = word2Group = finalObject = null;
+                
+                [combinationControls, downloadControls, cutControls, postCutControls].forEach(el => el.classList.add('hidden'));
+                if (cuttingPlaneHelper) cuttingPlaneHelper.visible = false;
+                if (cuttingPlaneHelperTop) cuttingPlaneHelperTop.visible = false;
+
+                const text1 = textHorizontalInput.value.toUpperCase();
+                const text2 = textVerticalInput.value.toUpperCase();
+                const overlapAmount = parseFloat(overlapSlider.value);
+                const shouldForceLength = forceLengthToggle.checked;
+                const targetLength = parseFloat(lengthSlider.value);
+                const verticalStretchFactor = parseFloat(verticalStretchSlider.value);
+                const selectedFont = fonts[fontFamilySelect.value][fontWeightSelect.value];
+                const quality = parseInt(qualitySlider.value);
+                
+                const horizontalMaterial = new THREE.MeshStandardMaterial({ color: colorHorizontalInput.value, wireframe: isWireframe });
+                const verticalMaterial = new THREE.MeshStandardMaterial({ color: colorVerticalInput.value, wireframe: isWireframe });
+
+                word1Group = createWord(text1, { font: selectedFont, size: 40, depth: 80, material: horizontalMaterial, overlapAmount, quality });
+                word2Group = createWord(text2, { font: selectedFont, size: 55, depth: 55, material: verticalMaterial, overlapAmount, quality });
+
+                word1Group.scale.y = verticalStretchFactor;
+                word2Group.scale.z = verticalStretchFactor;
+
+                if (shouldForceLength) {
+                    const box1 = new THREE.Box3().setFromObject(word1Group);
+                    const currentLength1 = box1.max.x - box1.min.x;
+                    if (currentLength1 > 0) word1Group.scale.x = targetLength / currentLength1;
+                    const box2 = new THREE.Box3().setFromObject(word2Group);
+                    const currentLength2 = box2.max.x - box2.min.x;
+                    if (currentLength2 > 0) word2Group.scale.x = targetLength / currentLength2;
+                }
+                
+                word2Group.rotation.x = -Math.PI / 2;
+                [word1Group, word2Group].forEach(g => g.updateMatrixWorld());
+
+                const box1 = new THREE.Box3().setFromObject(word1Group);
+                const center1 = box1.getCenter(new THREE.Vector3());
+                word1Group.position.set(-center1.x, 10 + (box1.max.y - box1.min.y) / 2, -center1.z);
+
+                const box2 = new THREE.Box3().setFromObject(word2Group);
+                const center2 = box2.getCenter(new THREE.Vector3());
+                word2Group.position.set(-center2.x, (box2.max.y - box2.min.y) / 2, -center2.z);
+                
+                scene.add(word1Group, word2Group);
+                combinationControls.classList.remove('hidden');
+                updateStepViewer(2);
+
+            } catch (error) {
+                alert("Ocurrió un error al generar los modelos. Revisa la consola (F12).");
+                console.error("ERROR EN generateBaseModels:", error);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        function unifyWord(group) {
+            if (!group || !group.children || group.children.length === 0) return null;
+            group.updateWorldMatrix(true, true);
+            const finalMaterial = group.children[0].originalMaterial || group.children[0].material;
+            let unifiedMesh = group.children[0].clone();
+            unifiedMesh.applyMatrix4(group.matrixWorld);
+            for (let i = 1; i < group.children.length; i++) {
+                const nextMesh = group.children[i].clone();
+                nextMesh.applyMatrix4(group.matrixWorld);
+                unifiedMesh = CSG.union(unifiedMesh, nextMesh);
+            }
+            unifiedMesh.material = finalMaterial;
+            return unifiedMesh;
+        }
+
+        async function performBooleanOperation() {
+            if (!word1Group || !word2Group) return;
+            try {
+                setLoading(true, 'Combinando objetos...');
+                await new Promise(resolve => setTimeout(resolve, 50));
+                letterControls.classList.add('hidden');
+                if (selectedLetter) {
+                    selectedLetter.material = selectedLetter.originalMaterial;
+                    selectedLetter = null;
+                }
+                const brush1 = unifyWord(word1Group);
+                const brush2 = unifyWord(word2Group);
+                if (!brush1 || !brush2) {
+                    alert("Error al unificar las palabras para la operación booleana.");
+                    setLoading(false); return;
+                }
+                let resultMesh;
+                switch(booleanOpSelect.value) {
+                    case 'subtract': resultMesh = CSG.subtract(brush1, brush2); break;
+                    case 'intersect': resultMesh = CSG.intersect(brush1, brush2); break;
+                    case 'union': default: resultMesh = CSG.union(brush1, brush2); break;
+                }
+                if (finalObject) scene.remove(finalObject);
+                finalObject = resultMesh;
+                finalObject.material = new THREE.MeshStandardMaterial({ color: 0x3b82f6, metalness: 0.2, roughness: 0.3, wireframe: isWireframe });
+                finalObject.updateMatrixWorld();
+                const box = new THREE.Box3().setFromObject(finalObject);
+                const center = box.getCenter(new THREE.Vector3());
+                finalObject.position.x += -center.x;
+                finalObject.position.y += -box.min.y;
+                finalObject.position.z += -center.z;
+                scene.remove(word1Group, word2Group);
+                word1Group = word2Group = null;
+                scene.add(finalObject);
+                downloadControls.classList.remove('hidden');
+                setupAndShowCutTools();
+                updateStepViewer(3);
+            } catch (error) {
+                alert("Ocurrió un error al combinar los objetos. Revisa la consola (F12).");
+                console.error("ERROR EN performBooleanOperation:", error);
+            } finally {
+                setLoading(false);
+            }
+        }
+        
+        function setupAndShowCutTools() {
+            finalObject.updateMatrixWorld();
+            const box = new THREE.Box3().setFromObject(finalObject);
+            const size = box.getSize(new THREE.Vector3());
+            const center = box.getCenter(new THREE.Vector3());
+            const minY = box.min.y, maxY = box.max.y;
+            cuttingPlaneHelper.geometry.dispose();
+            cuttingPlaneHelperTop.geometry.dispose();
+            const newPlaneGeo = new THREE.BoxGeometry(size.x + 2, 0.5, size.z + 2);
+            cuttingPlaneHelper.geometry = newPlaneGeo;
+            cuttingPlaneHelperTop.geometry = newPlaneGeo.clone();
+            [cuttingPlaneHelper, cuttingPlaneHelperTop].forEach(h => {
+                h.position.x = center.x;
+                h.position.z = center.z;
+            });
+            cutHeightSlider.min = minY;
+            cutHeightSlider.max = maxY;
+            cutHeightSlider.step = (maxY - minY) / 200 || 0.1;
+            cutHeightSlider.value = minY;
+            cutHeightValue.textContent = minY.toFixed(2);
+            cuttingPlaneHelper.position.y = minY;
+            cutHeightSliderTop.min = minY;
+            cutHeightSliderTop.max = maxY;
+            cutHeightSliderTop.step = (maxY - minY) / 200 || 0.1;
+            cutHeightSliderTop.value = maxY;
+            cutHeightValueTop.textContent = maxY.toFixed(2);
+            cuttingPlaneHelperTop.position.y = maxY;
+            enableTopCutToggle.checked = false;
+            topCutGroup.classList.add('opacity-50', 'pointer-events-none');
+            cuttingPlaneHelper.visible = true;
+            cuttingPlaneHelperTop.visible = false;
+            cutControls.classList.remove('hidden');
+        }
+        
+        async function performCuts() {
+            if (!finalObject) return;
+            try {
+                setLoading(true, 'Aplicando cortes...');
+                await new Promise(res => setTimeout(res, 50));
+                const bottomCutHeight = parseFloat(cutHeightSlider.value);
+                const isTopCutEnabled = enableTopCutToggle.checked;
+                let newObject;
+                const bbox = new THREE.Box3().setFromObject(finalObject);
+                const size = bbox.getSize(new THREE.Vector3());
+                const center = bbox.getCenter(new THREE.Vector3());
+                const cutterWidth = size.x + 1, cutterDepth = size.z + 1;
+                if (isTopCutEnabled) {
+                    const topCutHeight = parseFloat(cutHeightSliderTop.value);
+                    const keeperHeight = topCutHeight - bottomCutHeight;
+                    if (keeperHeight <= 0) throw new Error("La altura de corte superior debe ser mayor que la de base.");
+                    const keeperBox = new THREE.Mesh(new THREE.BoxGeometry(cutterWidth, keeperHeight, cutterDepth));
+                    keeperBox.position.set(center.x, bottomCutHeight + (keeperHeight / 2), center.z);
+                    keeperBox.updateMatrix();
+                    newObject = CSG.intersect(finalObject, keeperBox);
+                } else {
+                    const cutterHeight = size.y + 10;
+                    const cutterBox = new THREE.Mesh(new THREE.BoxGeometry(cutterWidth, cutterHeight, cutterDepth));
+                    cutterBox.position.set(center.x, bottomCutHeight - (cutterHeight / 2), center.z);
+                    cutterBox.updateMatrix();
+                    newObject = CSG.subtract(finalObject, cutterBox);
+                }
+                const oldMaterial = finalObject.material;
+                scene.remove(finalObject);
+                finalObject = newObject;
+                finalObject.material = oldMaterial;
+                scene.add(finalObject);
+                finalObject.updateMatrixWorld();
+                const finalBox = new THREE.Box3().setFromObject(finalObject);
+                finalObject.position.y -= finalBox.min.y;
+                cutControls.classList.add('hidden');
+                cuttingPlaneHelper.visible = cuttingPlaneHelperTop.visible = false;
+                postCutControls.classList.remove('hidden');
+                finalObject.scale.set(1, 1, 1);
+                const initialBox = new THREE.Box3().setFromObject(finalObject);
+                const initialSize = initialBox.getSize(new THREE.Vector3());
+                unscaledFinalObjectWidth = initialSize.x;
+                unscaledFinalObjectHeight = initialSize.y;
+                unscaledFinalObjectDepth = initialSize.z;
+                const setupInitialScale = (slider, valueSpan, unscaledDim, min, max, axis) => {
+                    if (unscaledDim > 0) {
+                        const clampedValue = Math.max(min, Math.min(max, unscaledDim));
+                        slider.min = min; slider.max = max; slider.value = clampedValue;
+                        valueSpan.textContent = clampedValue.toFixed(2);
+                        finalObject.scale[axis] = clampedValue / unscaledDim;
+                    }
+                };
+                setupInitialScale(scaleXSlider, scaleXValue, unscaledFinalObjectWidth, 110, 155, 'x');
+                setupInitialScale(scaleYSlider, scaleYValue, unscaledFinalObjectHeight, 30, 42, 'y');
+                setupInitialScale(scaleZSlider, scaleZValue, unscaledFinalObjectDepth, 30, 42, 'z');
+                finalObject.position.y = (unscaledFinalObjectHeight * finalObject.scale.y) / 2;
+                updateFinalDimensions();
+                updateStepViewer(4);
+            } catch (error) {
+                alert("Ocurrió un error al aplicar el corte. " + error.message);
+                console.error("ERROR EN performCuts:", error);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        function updateFinalDimensions() {
+            if (!finalObject) return;
+            const currentSize = new THREE.Box3().setFromObject(finalObject).getSize(new THREE.Vector3());
+            document.getElementById('dim-x').textContent = currentSize.x.toFixed(2);
+            document.getElementById('dim-y').textContent = currentSize.y.toFixed(2);
+            document.getElementById('dim-z').textContent = currentSize.z.toFixed(2);
+        }
+
+        function toggleWireframeView() {
+            isWireframe = !isWireframe;
+            highlightMaterial.wireframe = isWireframe;
+            toggleWireframeBtn.innerHTML = isWireframe ? '<i class="fas fa-cube"></i> VER SÓLIDO' : '<i class="fas fa-network-wired"></i> VER MALLA';
+            toggleWireframeBtn.classList.toggle('bg-indigo-600', !isWireframe);
+            toggleWireframeBtn.classList.toggle('hover:bg-indigo-700', !isWireframe);
+            toggleWireframeBtn.classList.toggle('bg-teal-600', isWireframe);
+            toggleWireframeBtn.classList.toggle('hover:bg-teal-700', isWireframe);
+            if (finalObject) finalObject.material.wireframe = isWireframe;
+            [word1Group, word2Group].forEach(group => {
+                if (group) group.traverse(child => {
+                    if (child.isMesh && child.material && child !== selectedLetter) child.material.wireframe = isWireframe;
+                });
+            });
+        }
+
+        function downloadGltfModel() {
+            if (!finalObject) return;
+            updateStepViewer(6);
+            new GLTFExporter().parse(finalObject, (gltf) => {
+                const blob = new Blob([JSON.stringify(gltf, null, 2)], { type: 'application/gltf+json' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = `FLIP-TEXT.gltf`;
+                link.click();
+                URL.revokeObjectURL(link.href);
+            }, {});
+        }
+
+        function downloadStlModel() {
+            if (!finalObject) return;
+            updateStepViewer(6);
+            const result = new STLExporter().parse(finalObject, { binary: true }); 
+            const blob = new Blob([result], { type: 'model/stl' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `FLIP-TEXT.stl`;
+            link.click();
+            URL.revokeObjectURL(link.href);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        
+        function onDocumentMouseDown(event) {
+            if (!word1Group && !word2Group) return;
+            event.preventDefault();
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects([...(word1Group?.children || []), ...(word2Group?.children || [])]);
+            if (intersects.length > 0) {
+                const newObject = intersects[0].object;
+                if (selectedLetter !== newObject) {
+                    if (selectedLetter && selectedLetter.originalMaterial) selectedLetter.material = selectedLetter.originalMaterial;
+                    selectedLetter = newObject;
+                    if (!selectedLetter.originalMaterial) selectedLetter.originalMaterial = selectedLetter.material;
+                    originalLetterPosition.copy(selectedLetter.position);
+                    originalLetterScale.copy(selectedLetter.scale);
+                    selectedLetter.updateWorldMatrix(true, true);
+                    const worldBBox = new THREE.Box3().setFromObject(selectedLetter);
+                    const letterSize = worldBBox.getSize(new THREE.Vector3());
+                    originalLetterWidth = letterSize.x / selectedLetter.parent.scale.x;
+                    originalLetterHeight = letterSize.y / selectedLetter.parent.scale.y; // Captura de altura añadida
+                    updateLetterPosition(0, true);
+                    updateLetterScale(0, true);
+                    updateLetterHeight(0, true); // Inicialización del control de altura añadido
+                    letterControls.classList.remove('hidden');
+                }
+                selectedLetter.material = highlightMaterial;
+                highlightMaterial.wireframe = isWireframe;
+                controls.enabled = false;
+            } else {
+                if (selectedLetter && selectedLetter.originalMaterial) selectedLetter.material = selectedLetter.originalMaterial;
+                selectedLetter = null;
+                letterControls.classList.add('hidden');
+                controls.enabled = true;
+            }
+        }
+        
+        function updateLetterPosition(value, forceUpdate = false) {
+            if (!selectedLetter && !forceUpdate) return;
+            letterPosXSlider.value = value;
+            letterPosXInput.value = value.toFixed(1);
+            if (selectedLetter) selectedLetter.position.x = originalLetterPosition.x + value;
+        }
+
+        function updateLetterScale(value, forceUpdate = false) {
+             if (!selectedLetter && !forceUpdate) return;
+            letterScaleXSlider.value = value;
+            letterScaleXInput.value = value.toFixed(1);
+            if (selectedLetter && originalLetterWidth > 0) {
+                const newWidth = Math.max(1.0, originalLetterWidth + value);
+                const newScaleFactor = newWidth / originalLetterWidth;
+                selectedLetter.scale.x = originalLetterScale.x * newScaleFactor;
+            }
+        }
+
+        // --- Nueva función para actualizar la altura ---
+        function updateLetterHeight(value, forceUpdate = false) {
+             if (!selectedLetter && !forceUpdate) return;
+            letterScaleYSlider.value = value;
+            letterScaleYInput.value = value.toFixed(1);
+            if (selectedLetter && originalLetterHeight > 0) {
+                const newHeight = Math.max(1.0, originalLetterHeight + value);
+                const newScaleFactor = newHeight / originalLetterHeight;
+                selectedLetter.scale.y = originalLetterScale.y * newScaleFactor;
+            }
+        }
+
+        function resetSelectedLetter() {
+            if (!selectedLetter) return;
+            selectedLetter.position.copy(originalLetterPosition);
+            selectedLetter.scale.copy(originalLetterScale);
+            updateLetterPosition(0, true);
+            updateLetterScale(0, true);
+            updateLetterHeight(0, true); // Reseteo del control de altura añadido
+        }
+
+        init();
+    </script>
+</body>
+</html>
